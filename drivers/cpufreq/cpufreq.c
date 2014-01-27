@@ -519,6 +519,8 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 
 	sysfs_notify(&policy->kobj, NULL, "scaling_governor");
 
+	kobject_uevent(&policy->kobj, KOBJ_ADD);
+
 	if (ret)
 		return ret;
 	else
@@ -748,11 +750,22 @@ EXPORT_SYMBOL(cpufreq_global_kobject);
 
 static int cpufreq_global_kobject_usage;
 
+static struct kset *cpufreq_kset;
+
 int cpufreq_get_global_kobject(void)
 {
-	if (!cpufreq_global_kobject_usage++)
-		return kobject_add(cpufreq_global_kobject,
+	if (!cpufreq_global_kobject_usage++) {
+
+		int ret = kobject_add(cpufreq_global_kobject,
 				&cpu_subsys.dev_root->kobj, "%s", "cpufreq");
+
+		/* create cpufreq kset */
+		cpufreq_kset = kset_create_and_add("kset", NULL, cpufreq_global_kobject);
+		BUG_ON(!cpufreq_kset);
+		cpufreq_global_kobject->kset = cpufreq_kset;
+
+		return ret;
+	}
 
 	return 0;
 }
@@ -760,8 +773,10 @@ EXPORT_SYMBOL(cpufreq_get_global_kobject);
 
 void cpufreq_put_global_kobject(void)
 {
-	if (!--cpufreq_global_kobject_usage)
+	if (!--cpufreq_global_kobject_usage) {
+		kset_unregister(cpufreq_kset);
 		kobject_del(cpufreq_global_kobject);
+	}
 }
 EXPORT_SYMBOL(cpufreq_put_global_kobject);
 
@@ -812,6 +827,7 @@ static int cpufreq_add_dev_interface(struct cpufreq_policy *policy,
 				     struct device *dev)
 {
 	struct freq_attr **drv_attr;
+	struct kset *cpudev_kset;
 	int ret = 0;
 
 	/* prepare interface data */
@@ -819,6 +835,14 @@ static int cpufreq_add_dev_interface(struct cpufreq_policy *policy,
 				   &dev->kobj, "cpufreq");
 	if (ret)
 		return ret;
+
+	/* create cpu device kset */
+	cpudev_kset = kset_create_and_add("kset", NULL, &dev->kobj);
+	BUG_ON(!cpudev_kset);
+	policy->kobj.kset = cpudev_kset;
+
+	/* send uevent when cpu device is added */
+	kobject_uevent(&dev->kobj, KOBJ_ADD);
 
 	/* set up files for this cpu device */
 	drv_attr = cpufreq_driver->attr;
@@ -2306,6 +2330,7 @@ static int __init cpufreq_core_init(void)
 
 	cpufreq_global_kobject = kobject_create();
 	BUG_ON(!cpufreq_global_kobject);
+
 	register_syscore_ops(&cpufreq_syscore_ops);
 
 	return 0;
