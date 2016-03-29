@@ -24,7 +24,7 @@
 	interrupt-parent = <&intc>;
 
 	chosen {
-		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1";
+		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1 sched_same_power_cost_cpus=0-3";
 	};
 
 	aliases {
@@ -2867,7 +2867,6 @@
 		qcom,vdd-voltage-level = <0 1000000 1000000>;
 		qcom,vbus-valid-override;
 		qcom,no-pipe-clk-switch;
-		qcom,qmp-misc-config;
 
 		clocks = <&clock_gcc clk_gcc_usb3_phy_aux_clk>,
 			 <&clock_gcc clk_gcc_usb3_phy_pipe_clk>,
