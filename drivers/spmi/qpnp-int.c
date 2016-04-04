@@ -1,5 +1,4 @@
 /* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (C) 2016 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -627,6 +626,8 @@ static int __qpnpint_handle_irq(struct spmi_controller *spmi_ctrl,
 		struct irq_desc *desc;
 		const char *name = "null";
 
+		log_base_wakeup_reason(irq);
+
 		desc = irq_to_desc(irq);
 		if (desc == NULL)
 			name = "stray irq";
@@ -635,7 +636,6 @@ static int __qpnpint_handle_irq(struct spmi_controller *spmi_ctrl,
 
 		pr_warn("%d triggered [0x%01x, 0x%02x,0x%01x] %s\n",
 				irq, spec->slave, spec->per, spec->irq, name);
-		log_wakeup_reason(irq);
 	} else {
 		generic_handle_irq(irq);
 	}
