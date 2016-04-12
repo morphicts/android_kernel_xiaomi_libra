@@ -3118,7 +3118,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
 	struct sdhci_msm_slot_reg_data *vreg_data = msm_host->pdata->vreg_data;
 	unsigned long delay = HW_RESET_DELAY_INCREMENT * 2;
-	int rc;
+	int rc = 0;
 
 	if (!vreg_data || (card && !mmc_card_sd(card)))
 		return;

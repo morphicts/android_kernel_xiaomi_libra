@@ -237,6 +237,12 @@ static ssize_t synaptics_rmi4_0dbutton_show(struct device *dev,
 static ssize_t synaptics_rmi4_0dbutton_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
+static ssize_t synaptics_rmi4_ts_hw_keys_disable_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t synaptics_rmi4_ts_hw_keys_disable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count);
+
 static ssize_t synaptics_rmi4_suspend_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
@@ -645,6 +651,9 @@ static struct device_attribute attrs[] = {
 	__ATTR(0dbutton, (S_IRUGO | S_IWUGO),
 			synaptics_rmi4_0dbutton_show,
 			synaptics_rmi4_0dbutton_store),
+	__ATTR(ts_hw_keys_disable, (S_IRUGO | S_IWUGO),
+			synaptics_rmi4_ts_hw_keys_disable_show,
+			synaptics_rmi4_ts_hw_keys_disable_store),
 	__ATTR(suspend, S_IWUGO,
 			synaptics_rmi4_show_error,
 			synaptics_rmi4_suspend_store),
@@ -802,6 +811,32 @@ static ssize_t synaptics_rmi4_0dbutton_store(struct device *dev,
 	}
 
 	rmi4_data->button_0d_enabled = input;
+
+	return count;
+}
+
+static bool ts_hw_keys_disabled;
+
+static ssize_t synaptics_rmi4_ts_hw_keys_disable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u\n", ts_hw_keys_disabled);
+}
+
+static ssize_t synaptics_rmi4_ts_hw_keys_disable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int input;
+	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+
+	if (sscanf(buf, "%u", &input) != 1)
+		return -EINVAL;
+
+	input = input > 0 ? 1 : 0;
+
+	dev_info(rmi4_data->pdev->dev.parent, "%s: input %d\n", __func__, input);
+
+	ts_hw_keys_disabled = input;
 
 	return count;
 }
@@ -1492,6 +1527,10 @@ static void synaptics_rmi4_f1a_report(struct synaptics_rmi4_data *rmi4_data,
 		index = button / 8;
 		shift = button % 8;
 		status = ((data[index] >> shift) & MASK_1BIT);
+
+		if (ts_hw_keys_disabled) {
+			status = 0;
+		}
 
 		if (current_status[button] == status)
 			continue;
@@ -3909,6 +3948,8 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->suspend = false;
 	rmi4_data->irq_enabled = false;
 	rmi4_data->fingers_on_2d = false;
+	
+	ts_hw_keys_disabled = false;
 
 	rmi4_data->reset_device = synaptics_rmi4_reset_device;
 	rmi4_data->irq_enable = synaptics_rmi4_irq_enable;
@@ -4394,25 +4435,62 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 			container_of(self, struct synaptics_rmi4_data,
 			fb_notifier);
 
-	if (evdata && evdata->data && rmi4_data) {
-		if (event == FB_EVENT_BLANK) {
+	if (evdata && evdata->data && rmi4_data) 
+	{
+		if (event == FB_EVENT_BLANK) 
+		{
+			int new_status;
+			/*
+			 * Normal Screen Wakeup
+			 *
+			 * <6>[   43.486172] [syna] Event: 4 -> 0
+			 * <6>[   50.488192] [syna] Event: 0 -> 4
+			 *
+			 * Doze Wakeup
+			 *
+			 * <6>[   81.869758] [syna] Event: 4 -> 1
+			 * <6>[   86.458247] [syna] Event: 1 -> 4
+			 *
+			 */
+
 			transition = evdata->data;
-			if (*transition == FB_BLANK_POWERDOWN) {
-				synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
-				rmi4_data->fb_ready = false;
+
+			if (*transition == FB_BLANK_UNBLANK ||
+					 *transition == FB_BLANK_NORMAL ||
+					 *transition == FB_BLANK_VSYNC_SUSPEND ||
+					 *transition == FB_BLANK_HSYNC_SUSPEND) 
+			{
+				new_status = true;
+			}
+			else
+			//if (*transition == FB_BLANK_POWERDOWN) 
+			{
+				new_status = false;
+			} 
+ 
+
+			if (rmi4_data->fb_ready != new_status)
+			{
+				rmi4_data->fb_ready = new_status;
+
+				if (new_status) {
+					dev_info(rmi4_data->pdev->dev.parent, "resume tp\n");				
+					synaptics_rmi4_resume(&rmi4_data->pdev->dev);
 #ifdef TOUCH_WAKEUP_EVENT_RECORD
-				if (atomic_read(&wakeup_flag) == 1) {
-					wakeup_event_record_write(EVENT_SCREEN_OFF);
-					atomic_set(&wakeup_flag, 0);
+					if (atomic_read(&wakeup_flag) == 1)
+						wakeup_event_record_write(EVENT_SCREEN_ON);
+#endif
 				}
-#endif
-			} else if (*transition == FB_BLANK_UNBLANK) {
-				synaptics_rmi4_resume(&rmi4_data->pdev->dev);
-				rmi4_data->fb_ready = true;
+				else {
+					dev_info(rmi4_data->pdev->dev.parent, "suspend tp\n");				
+					synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
 #ifdef TOUCH_WAKEUP_EVENT_RECORD
-				if (atomic_read(&wakeup_flag) == 1)
-					wakeup_event_record_write(EVENT_SCREEN_ON);
+					if (atomic_read(&wakeup_flag) == 1) {
+						wakeup_event_record_write(EVENT_SCREEN_OFF);
+						atomic_set(&wakeup_flag, 0);
+					}
 #endif
+				}
 			}
 		}
 	}

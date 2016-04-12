@@ -4732,7 +4732,7 @@ static ssize_t mxt_mutual_ref_write(struct file *filp, struct kobject *kobj,
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 	struct mxt_data *data = dev_get_drvdata(dev);
-	int chan_x, chan_y, max_nodes;
+	int chan_x, chan_y, max_nodes = 0;
 	s16 *ref_buf;
 	int error = 0, i, j;
 	unsigned int value;
@@ -4752,6 +4752,10 @@ static ssize_t mxt_mutual_ref_write(struct file *filp, struct kobject *kobj,
 		chan_x = MXT_874U_CHANNELS_X;
 		chan_y = MXT_874U_CHANNELS_Y;
 		max_nodes = MXT_874U_MAX_NODES;
+	} else {
+		dev_err(dev, "Invalid family/variant ID\n");
+		error = -EINVAL;
+		goto out;
 	}
 
 	if (data->raw_ref_buf)
@@ -4828,7 +4832,7 @@ static ssize_t mxt_self_ref_write(struct file *filp, struct kobject *kobj,
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 	struct mxt_data *data = dev_get_drvdata(dev);
-	int chan_x, chan_y, chan_x_reserved, even_x_start, odd_x_start;
+	int chan_x = 0, chan_y = 0, chan_x_reserved = 0, even_x_start = 0, odd_x_start = 0;
 	s16 *ref_buf;
 	int error = 0, i;
 	unsigned int value;
@@ -4856,6 +4860,10 @@ static ssize_t mxt_self_ref_write(struct file *filp, struct kobject *kobj,
 		odd_x_start = MXT_874U_CHANNELS_Y +
 			MXT_874U_CHANNELS_X / 2 +
 			MXT_874U_X_SELFREF_RESERVED;
+	} else {
+		dev_err(dev, "Invalid family/variant ID\n");
+		error = -EINVAL;
+		goto out;
 	}
 
 	if (data->raw_ref_buf)

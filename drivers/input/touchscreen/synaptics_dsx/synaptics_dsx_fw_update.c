@@ -2189,6 +2189,17 @@ static int fwu_get_image_firmware_id(unsigned int *fw_id)
 	return 0;
 }
 
+static int dsx_skip_fwu = 0;
+
+static int __init ts_dsx_skip_fwu_setup(char *str)
+{
+	if (strncmp(str, "1", 1) == 0)
+		dsx_skip_fwu = 1;
+	return 1;
+}
+
+__setup("ts_dsx_skip_fwu=", ts_dsx_skip_fwu_setup);
+
 static enum flash_area fwu_go_nogo(void)
 {
 	int retval;
@@ -2208,6 +2219,13 @@ static enum flash_area fwu_go_nogo(void)
 	/* Update both UI and config if device is in bootloader mode */
 	if (fwu->in_bl_mode) {
 		flash_area = UI_FIRMWARE;
+		goto exit;
+	}
+
+	if (dsx_skip_fwu)
+	{
+		dev_info(rmi4_data->pdev->dev.parent, "%s: dsx_skip_fwu set!\n", __func__);
+		flash_area = NONE;
 		goto exit;
 	}
 
