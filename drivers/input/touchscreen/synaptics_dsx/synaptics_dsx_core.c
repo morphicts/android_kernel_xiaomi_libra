@@ -635,34 +635,49 @@ static struct synaptics_rmi4_exp_fn_data exp_data;
 
 struct synaptics_dsx_button_map *vir_button_map;
 
-static struct device_attribute attrs[] = {
-	__ATTR(reset, S_IWUGO,
-			synaptics_rmi4_show_error,
-			synaptics_rmi4_f01_reset_store),
-	__ATTR(productinfo, S_IRUGO,
-			synaptics_rmi4_f01_productinfo_show,
-			synaptics_rmi4_store_error),
-	__ATTR(buildid, S_IRUGO,
-			synaptics_rmi4_f01_buildid_show,
-			synaptics_rmi4_store_error),
-	__ATTR(flashprog, S_IRUGO,
-			synaptics_rmi4_f01_flashprog_show,
-			synaptics_rmi4_store_error),
-	__ATTR(0dbutton, (S_IRUGO | S_IWUGO),
-			synaptics_rmi4_0dbutton_show,
-			synaptics_rmi4_0dbutton_store),
-	__ATTR(ts_hw_keys_disable, (S_IRUGO | S_IWUGO),
-			synaptics_rmi4_ts_hw_keys_disable_show,
-			synaptics_rmi4_ts_hw_keys_disable_store),
-	__ATTR(suspend, S_IWUGO,
-			synaptics_rmi4_show_error,
-			synaptics_rmi4_suspend_store),
-	__ATTR(wake_gesture, (S_IRUGO | S_IWUGO),
-			synaptics_rmi4_wake_gesture_show,
-			synaptics_rmi4_wake_gesture_store),
-	__ATTR(edge_mode, (S_IRUGO | S_IWUGO),
-			synaptics_rmi4_edge_mode_show,
-			synaptics_rmi4_edge_mode_store),
+static DEVICE_ATTR(reset, S_IWUGO,
+		synaptics_rmi4_show_error,
+		synaptics_rmi4_f01_reset_store);
+static DEVICE_ATTR(productinfo, S_IRUGO,
+		synaptics_rmi4_f01_productinfo_show,
+		synaptics_rmi4_store_error);
+static DEVICE_ATTR(buildid, S_IRUGO,
+		synaptics_rmi4_f01_buildid_show,
+		synaptics_rmi4_store_error);
+static DEVICE_ATTR(flashprog, S_IRUGO,
+		synaptics_rmi4_f01_flashprog_show,
+		synaptics_rmi4_store_error);
+static DEVICE_ATTR(0dbutton, (S_IRUGO | S_IWUGO),
+		synaptics_rmi4_0dbutton_show,
+		synaptics_rmi4_0dbutton_store);
+static DEVICE_ATTR(ts_hw_keys_disable, (S_IRUGO | S_IWUGO),
+		synaptics_rmi4_ts_hw_keys_disable_show,
+		synaptics_rmi4_ts_hw_keys_disable_store);
+static DEVICE_ATTR(suspend, S_IWUGO,
+		synaptics_rmi4_show_error,
+		synaptics_rmi4_suspend_store);
+static DEVICE_ATTR(wake_gesture, (S_IRUGO | S_IWUGO),
+		synaptics_rmi4_wake_gesture_show,
+		synaptics_rmi4_wake_gesture_store);
+static DEVICE_ATTR(edge_mode, (S_IRUGO | S_IWUGO),
+		synaptics_rmi4_edge_mode_show,
+		synaptics_rmi4_edge_mode_store);
+
+static struct attribute *syna_attrs[] = {
+	&dev_attr_reset.attr,
+	&dev_attr_productinfo.attr,
+	&dev_attr_buildid.attr,
+	&dev_attr_flashprog.attr,
+	&dev_attr_0dbutton.attr,
+	&dev_attr_ts_hw_keys_disable.attr,
+	&dev_attr_suspend.attr,
+	&dev_attr_wake_gesture.attr,
+	&dev_attr_edge_mode.attr,
+	NULL
+};
+
+static const struct attribute_group syna_attr_group = {
+	.attrs = syna_attrs,
 };
 
 static struct kobj_attribute virtual_key_map_attr = {
@@ -3584,7 +3599,6 @@ static int synaptics_rmi4_sw_reset(struct synaptics_rmi4_data *rmi4_data)
 static void synaptics_rmi4_rebuild_work(struct work_struct *work)
 {
 	int retval;
-	unsigned char attr_count;
 	struct synaptics_rmi4_exp_fhandler *exp_fhandler;
 	struct delayed_work *delayed_work =
 			container_of(work, struct delayed_work, work);
@@ -3604,10 +3618,8 @@ static void synaptics_rmi4_rebuild_work(struct work_struct *work)
 				exp_fhandler->exp_fn->remove(rmi4_data);
 	}
 
-	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
-		sysfs_remove_file(&rmi4_data->input_dev->dev.kobj,
-				&attrs[attr_count].attr);
-	}
+	sysfs_remove_link(&rmi4_data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_group(&rmi4_data->input_dev->dev.kobj, &syna_attr_group);
 
 	synaptics_rmi4_free_fingers(rmi4_data);
 	synaptics_rmi4_empty_fn_list(rmi4_data);
@@ -3634,15 +3646,9 @@ static void synaptics_rmi4_rebuild_work(struct work_struct *work)
 		goto exit;
 	}
 
-	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
-		retval = sysfs_create_file(&rmi4_data->input_dev->dev.kobj,
-				&attrs[attr_count].attr);
-		if (retval < 0) {
-			dev_err(rmi4_data->pdev->dev.parent,
-					"%s: Failed to create sysfs attributes\n",
-					__func__);
-			goto exit;
-		}
+	retval = sysfs_create_group(&rmi4_data->input_dev->dev.kobj, &syna_attr_group);
+	if (!retval) {
+		retval = sysfs_create_link(NULL, &rmi4_data->input_dev->dev.kobj, "touchscreen");
 	}
 
 	if (!list_empty(&exp_data.list)) {
@@ -3913,7 +3919,6 @@ EXPORT_SYMBOL(synaptics_rmi4_new_function);
 static int synaptics_rmi4_probe(struct platform_device *pdev)
 {
 	int retval;
-	unsigned char attr_count;
 	struct synaptics_rmi4_data *rmi4_data;
 	const struct synaptics_dsx_hw_interface *hw_if;
 	const struct synaptics_dsx_board_data *bdata;
@@ -4077,15 +4082,11 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 		}
 	}
 
-	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
-		retval = sysfs_create_file(&rmi4_data->input_dev->dev.kobj,
-				&attrs[attr_count].attr);
-		if (retval < 0) {
-			dev_err(&pdev->dev,
-					"%s: Failed to create sysfs attributes\n",
-					__func__);
-			goto err_sysfs;
-		}
+	retval = sysfs_create_group(&rmi4_data->input_dev->dev.kobj, &syna_attr_group);
+	if (retval) {
+		goto err_sysfs;
+	} else {
+		retval = sysfs_create_link(NULL, &rmi4_data->input_dev->dev.kobj, "touchscreen");
 	}
 
 	rmi4_data->rb_workqueue =
@@ -4126,11 +4127,9 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	return retval;
 
 err_sysfs:
-	for (attr_count--; attr_count >= 0; attr_count--) {
-		sysfs_remove_file(&rmi4_data->input_dev->dev.kobj,
-				&attrs[attr_count].attr);
-	}
-
+	sysfs_remove_link(&rmi4_data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_group(&rmi4_data->input_dev->dev.kobj, &syna_attr_group);
+	
 err_virtual_buttons:
 	if (rmi4_data->board_prop_dir) {
 		sysfs_remove_file(rmi4_data->board_prop_dir,
@@ -4182,7 +4181,6 @@ err_get_reg:
 
 static int synaptics_rmi4_remove(struct platform_device *pdev)
 {
-	unsigned char attr_count;
 	struct synaptics_rmi4_data *rmi4_data = platform_get_drvdata(pdev);
 	const struct synaptics_dsx_board_data *bdata =
 			rmi4_data->hw_if->board_data;
@@ -4206,10 +4204,8 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	flush_workqueue(rmi4_data->rb_workqueue);
 	destroy_workqueue(rmi4_data->rb_workqueue);
 
-	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
-		sysfs_remove_file(&rmi4_data->input_dev->dev.kobj,
-				&attrs[attr_count].attr);
-	}
+	sysfs_remove_link(&rmi4_data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_group(&rmi4_data->input_dev->dev.kobj, &syna_attr_group);
 
 	if (rmi4_data->board_prop_dir) {
 		sysfs_remove_file(rmi4_data->board_prop_dir,

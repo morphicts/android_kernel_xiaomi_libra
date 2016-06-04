@@ -750,6 +750,8 @@ struct mxt_data {
 #ifdef CONFIG_FB
 	struct notifier_block fb_notif;
 #endif
+
+	enum mxt_edge_mode edge_mode;
 };
 
 static struct mxt_suspend mxt_save[] = {
@@ -1555,6 +1557,8 @@ static void mxt_proc_t100_messages(struct mxt_data *data, u8 *message)
 	}
 }
 
+static bool ts_hw_keys_disabled;
+
 static void mxt_proc_t15_messages(struct mxt_data *data, u8 *msg)
 {
 	struct input_dev *input_dev = data->input_dev;
@@ -1576,6 +1580,10 @@ static void mxt_proc_t15_messages(struct mxt_data *data, u8 *msg)
 	for (key = 0; key < pdata->config_array[index].key_num; key++) {
 		curr_state = test_bit(key, &data->keystatus);
 		new_state = test_bit(key, &keystates);
+
+		if (ts_hw_keys_disabled) {
+			new_state = 0;
+		}
 
 		if (!curr_state && new_state) {
 			dev_dbg(dev, "T15 key press: %u\n", key);
@@ -1785,6 +1793,10 @@ static void mxt_proc_t97_messages(struct mxt_data *data, u8 *msg)
 	for (key = 0; key < pdata->config_array[index].key_num; key++) {
 		curr_state = test_bit(key, &data->keystatus);
 		new_state = test_bit(key, &keystates);
+
+		if (ts_hw_keys_disabled) {
+			new_state = 0;
+		}
 
 		if (!curr_state && new_state) {
 			dev_dbg(dev, "T97 key press: %u, key_code = %u\n", key, pdata->config_array[index].key_codes[key]);
@@ -3340,6 +3352,8 @@ static int mxt_initialize(struct mxt_data *data)
 	int error;
 	u8 retry_count = 0;
 
+	ts_hw_keys_disabled = false;
+
 retry_probe:
 	/* Read info block */
 	error = mxt_read_reg(client, 0, sizeof(*info), info);
@@ -4503,8 +4517,10 @@ static ssize_t mxt_wakeup_mode_store(struct device *dev,
 	unsigned long val;
 	int error;
 
-	if (pdata->config_array[index].wake_up_self_adcx == 0)
+	if (pdata->config_array[index].wake_up_self_adcx == 0) {
+		dev_err(&data->client->dev, "wake_up_self_adcx not supported\n");
 		return count;
+	}
 
 	if (pdata->cut_off_power) {
 		dev_err(&data->client->dev, "Wakeup gesture not supported\n");
@@ -4515,6 +4531,8 @@ static ssize_t mxt_wakeup_mode_store(struct device *dev,
 
 	if (!error)
 		data->wakeup_gesture_mode = (u8)val;
+
+	dev_info(dev, "%s: wakeup_gesture_mode %d\n", __func__, data->wakeup_gesture_mode);
 
 	if (data->is_stopped) {
 		/* Set wakeup gesture mode in deepsleep,
@@ -4656,6 +4674,64 @@ static ssize_t mxt_panel_color_show(struct device *dev,
 
 	count = snprintf(buf, PAGE_SIZE, "%c\n",
 			data->lockdown_info[2]);
+
+	return count;
+}
+
+static ssize_t mxt_ts_hw_keys_disable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u\n", ts_hw_keys_disabled);
+}
+
+static ssize_t mxt_ts_hw_keys_disable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int input;
+	//struct mxt_data *data = dev_get_drvdata(dev);
+
+	if (sscanf(buf, "%u", &input) != 1)
+		return -EINVAL;
+
+	input = input > 0 ? 1 : 0;
+
+	dev_info(dev, "%s: input %d\n", __func__, input);
+
+	ts_hw_keys_disabled = input;
+
+	return count;
+}
+
+static ssize_t mxt_edge_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct mxt_data *data = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+			data->edge_mode);
+}
+
+int mxt_enable_edge_touch(struct mxt_data *data, enum mxt_edge_mode edge_mode);
+
+static ssize_t mxt_edge_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int input;
+	struct mxt_data *data = dev_get_drvdata(dev);
+
+	if (sscanf(buf, "%u", &input) != 1)
+		return -EINVAL;
+
+	dev_info(dev, "%s: input %d\n", __func__, input);
+
+	if (input < EDGE_DISABLE || input > EDGE_FINGER_HANDGRIP)
+		return count;
+
+	if (mxt_enable_edge_touch(data, input) != 0) {
+		dev_err(dev,
+			"Unable to switch edge touch mode\n");
+	} else
+		data->edge_mode = input;
 
 	return count;
 }
@@ -5194,10 +5270,13 @@ static DEVICE_ATTR(diagnostic, S_IWUSR | S_IRUSR, mxt_diagnostic_show, mxt_diagn
 static DEVICE_ATTR(sensitive_mode, S_IWUSR | S_IRUSR, mxt_sensitive_mode_show, mxt_sensitive_mode_store);
 static DEVICE_ATTR(chip_reset, S_IWUSR, NULL, mxt_chip_reset_store);
 static DEVICE_ATTR(chg_state, S_IRUGO, mxt_chg_state_show, NULL);
-static DEVICE_ATTR(wakeup_mode, S_IWUSR | S_IRUSR, mxt_wakeup_mode_show, mxt_wakeup_mode_store);
+//static DEVICE_ATTR(wakeup_mode, S_IWUSR | S_IRUSR, mxt_wakeup_mode_show, mxt_wakeup_mode_store);
+static DEVICE_ATTR(wake_gesture, S_IRUGO | S_IWUGO, mxt_wakeup_mode_show, mxt_wakeup_mode_store);
 static DEVICE_ATTR(hover_tune, S_IWUSR | S_IRUSR, mxt_hover_tune_show, mxt_hover_tune_store);
 static DEVICE_ATTR(hover_from_flash, S_IWUSR, NULL, mxt_hover_from_flash_store);
 static DEVICE_ATTR(panel_color, S_IRUSR, mxt_panel_color_show, NULL);
+static DEVICE_ATTR(ts_hw_keys_disable, (S_IRUGO | S_IWUGO), mxt_ts_hw_keys_disable_show, mxt_ts_hw_keys_disable_store);
+static DEVICE_ATTR(edge_mode, (S_IRUGO | S_IWUGO), mxt_edge_mode_show, mxt_edge_mode_store);
 
 static struct attribute *mxt_attrs[] = {
 	&dev_attr_update_fw.attr,
@@ -5215,10 +5294,13 @@ static struct attribute *mxt_attrs[] = {
 	&dev_attr_sensitive_mode.attr,
 	&dev_attr_chip_reset.attr,
 	&dev_attr_chg_state.attr,
-	&dev_attr_wakeup_mode.attr,
+//	&dev_attr_wakeup_mode.attr,
+	&dev_attr_wake_gesture.attr,
 	&dev_attr_hover_tune.attr,
 	&dev_attr_hover_from_flash.attr,
 	&dev_attr_panel_color.attr,
+	&dev_attr_ts_hw_keys_disable.attr,
+	&dev_attr_edge_mode.attr,
 	NULL
 };
 
@@ -6393,12 +6475,13 @@ static int mxt_probe(struct i2c_client *client,
 
 	device_init_wakeup(&client->dev, 1);
 
-	error = sysfs_create_group(&client->dev.kobj, &mxt_attr_group);
+	error = sysfs_create_group(&data->input_dev->dev.kobj, &mxt_attr_group);
 	if (error) {
 		dev_err(&client->dev, "Failure %d creating sysfs group\n",
 			error);
 		goto err_free_irq;
 	}
+	error = sysfs_create_link(NULL, &data->input_dev->dev.kobj, "touchscreen");
 
 	sysfs_bin_attr_init(&data->mem_access_attr);
 	data->mem_access_attr.attr.name = "mem_access";
@@ -6453,7 +6536,8 @@ err_remove_self_ref_attr:
 err_remove_mem_access_attr:
 	sysfs_remove_bin_file(&client->dev.kobj, &data->mem_access_attr);
 err_remove_sysfs_group:
-	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
+	sysfs_remove_link(&data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_group(&data->input_dev->dev.kobj, &mxt_attr_group);
 err_free_irq:
 	free_irq(client->irq, data);
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_MXT_EDGE_SUPPORT
@@ -6496,7 +6580,8 @@ static int mxt_remove(struct i2c_client *client)
 	sysfs_remove_bin_file(&client->dev.kobj, &data->mutual_ref_attr);
 	sysfs_remove_bin_file(&client->dev.kobj, &data->self_ref_attr);
 	sysfs_remove_bin_file(&client->dev.kobj, &data->mem_access_attr);
-	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
+	sysfs_remove_link(&data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_group(&data->input_dev->dev.kobj, &mxt_attr_group);
 	free_irq(data->irq, data);
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_MXT_EDGE_SUPPORT
 	input_unregister_device(data->edge_input_dev);
