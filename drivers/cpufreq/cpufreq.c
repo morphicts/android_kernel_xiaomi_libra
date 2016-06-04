@@ -842,7 +842,7 @@ static int cpufreq_add_dev_interface(struct cpufreq_policy *policy,
 	policy->kobj.kset = cpudev_kset;
 
 	/* send uevent when cpu device is added */
-	kobject_uevent(&dev->kobj, KOBJ_ADD);
+	//kobject_uevent(&dev->kobj, KOBJ_ADD);
 	kobject_uevent(&policy->kobj, KOBJ_ADD);
 
 	/* set up files for this cpu device */
