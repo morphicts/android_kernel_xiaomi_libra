@@ -6536,7 +6536,7 @@ err_remove_self_ref_attr:
 err_remove_mem_access_attr:
 	sysfs_remove_bin_file(&client->dev.kobj, &data->mem_access_attr);
 err_remove_sysfs_group:
-	sysfs_remove_link(&data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_link(NULL, "touchscreen");
 	sysfs_remove_group(&data->input_dev->dev.kobj, &mxt_attr_group);
 err_free_irq:
 	free_irq(client->irq, data);
@@ -6580,7 +6580,7 @@ static int mxt_remove(struct i2c_client *client)
 	sysfs_remove_bin_file(&client->dev.kobj, &data->mutual_ref_attr);
 	sysfs_remove_bin_file(&client->dev.kobj, &data->self_ref_attr);
 	sysfs_remove_bin_file(&client->dev.kobj, &data->mem_access_attr);
-	sysfs_remove_link(&data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_link(NULL, "touchscreen");
 	sysfs_remove_group(&data->input_dev->dev.kobj, &mxt_attr_group);
 	free_irq(data->irq, data);
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_MXT_EDGE_SUPPORT

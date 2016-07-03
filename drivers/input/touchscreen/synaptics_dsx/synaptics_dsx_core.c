@@ -3618,7 +3618,7 @@ static void synaptics_rmi4_rebuild_work(struct work_struct *work)
 				exp_fhandler->exp_fn->remove(rmi4_data);
 	}
 
-	sysfs_remove_link(&rmi4_data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_link(NULL, "touchscreen");
 	sysfs_remove_group(&rmi4_data->input_dev->dev.kobj, &syna_attr_group);
 
 	synaptics_rmi4_free_fingers(rmi4_data);
@@ -4127,7 +4127,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	return retval;
 
 err_sysfs:
-	sysfs_remove_link(&rmi4_data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_link(NULL, "touchscreen");
 	sysfs_remove_group(&rmi4_data->input_dev->dev.kobj, &syna_attr_group);
 	
 err_virtual_buttons:
@@ -4204,7 +4204,7 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	flush_workqueue(rmi4_data->rb_workqueue);
 	destroy_workqueue(rmi4_data->rb_workqueue);
 
-	sysfs_remove_link(&rmi4_data->input_dev->dev.kobj, "touchscreen");
+	sysfs_remove_link(NULL, "touchscreen");
 	sysfs_remove_group(&rmi4_data->input_dev->dev.kobj, &syna_attr_group);
 
 	if (rmi4_data->board_prop_dir) {
